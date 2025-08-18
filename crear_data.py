@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 # Crear carpeta si no existe
 os.makedirs('data_sintetica', exist_ok=True)
+
+BASE_DIR =os.path.abspath(os.path.join(os.getcwd()))
 # ---------------------------
 np.random.seed(42)
 n_clientes = 20000
@@ -97,6 +99,13 @@ df = pd.DataFrame({
 # Vista previa
 print(df.head())
 
-# Guardar como CSV
-df.to_csv('data_sintetica/clientes_sinteticos.csv', index=False)
-print("Archivo clientes_sinteticos.csv generado")
+#Guardar la data como CSV 
+output_csv = os.path.join(BASE_DIR, 'data_sintetica', 'clientes_sinteticos.csv')
+os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+df.to_csv(output_csv, index=False)
+
+
+#Guardar como pkl en data sintetica
+output_pkl = os.path.join(BASE_DIR,'data_sintetica', 'clientes_sinteticos.pkl')
+os.makedirs(os.path.dirname(output_pkl), exist_ok=True)
+df.to_pickle(output_pkl)
