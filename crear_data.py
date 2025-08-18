@@ -96,6 +96,21 @@ df = pd.DataFrame({
     "cliente_activo": cliente_activo
 })
 
+# Asegurar consistencia con frecuencia_compra
+df['num_categorias'] = df['num_categorias'].astype(int)
+df['num_categorias'] = np.where(
+    df['frecuencia_compra'] == 0,
+    0,
+    np.minimum(df['num_categorias'].clip(lower=1), df['frecuencia_compra'])
+).astype(int)
+
+#recalcula lealtad sin artificios de +1:
+df['lealtad'] = np.where(
+    df['frecuencia_compra'] > 0,
+    df['num_categorias'] / df['frecuencia_compra'],
+    0.0
+)
+
 # Vista previa
 print(df.head())
 
