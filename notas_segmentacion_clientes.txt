@@ -1,0 +1,94 @@
+id_cliente (str): “C-######”. Único.
+
+fecha_primera_compra (date): últimos 36 meses; distribución más densa en meses recientes.
+fecha_ultima_compra (date): dentro de últimos 1–3 meses para clientes activos; puede ser >6 meses para inactivos.
+
+pais (cat): {Perú, Chile, Colombia, México, Otros}.
+canal (cat): {web, móvil, email, orgánico, ads}.
+
+frecuencia_compra (int): nº de órdenes en 12 meses; 0–60 (asimétrica, sesgo a la derecha).
+recencia_dias (int): días desde última compra; 0–365 (muchos valores bajos, cola larga).
+ticket_promedio_usd (float): 5–400 USD por orden (log-normal).
+monto_total_usd (float): 10–10,000 USD por cliente (cola larga).
+num_categorias (int): nº de categorías distintas compradas; 1–20.
+devoluciones_pct (float): 0–40% (media 5–8%).
+cupon_uso_pct (float): 0–70% (media 15–25%).
+nps (float): -100 a 100; valores faltantes posibles (~10%).
+
+vars_ingenieria (calc):
+  - rfm_recency = recencia_dias (menor = mejor).
+  - rfm_frequency = frecuencia_compra.
+  - rfm_monetary = monto_total_usd.
+  - aov = ticket_promedio_usd.
+  - intensidad = monto_total_usd / (recencia_dias + 1).
+  - lealtad = num_categorias / frecuencia_compra (clipped).
+  - cliente_activo (bin): recencia_dias <= 90.
+
+calidad_datos:
+  - nulos: {nps, cupon_uso_pct, devoluciones_pct} imputar con mediana/moda según tipo.
+  - outliers: winsorizar p1–p99 o log1p en {ticket_promedio_usd, monto_total_usd, recencia_dias}.
+  - normalizar fechas a recencia_dias; eliminar ids antes de modelar.
+
+preprocesamiento:
+  - escalar numéricas: RobustScaler o StandardScaler tras log1p donde aplique.
+  - dummies: {pais, canal} con get_dummies(drop_first=True).
+  - estandarizar RFM: z-score.
+  - train matrix X: solo numéricas + dummies; quitar columnas fuertemente correlacionadas (>|0.9|).
+
+reducción_dimensionalidad (PCA):
+  - componentes: 2–10.
+  - varianza explicada objetivo: ≥ 80% (ajustar n_components).
+  - usar PCA para visualización 2D/3D y como input opcional para clustering.
+
+clustering:
+  - algoritmo_1: K-Means.
+      * k inicial por codo y silueta: k ∈ {3,4,5,6,7,8}.
+      * init='k-means++', n_init=20, max_iter=500, random_state=42.
+  - algoritmo_2: DBSCAN.
+      * eps: buscar con gráfico k-dist (k= min_samples).
+      * min_samples: 5–30 (según densidad).
+      * métrica: euclidean (probar cosine si datos estandarizados).
+      * nota: DBSCAN puede marcar ruido (label = -1).
+
+métricas_evaluación:
+  - coef_silueta (K-Means y DBSCAN, ignorando ruido en DBSCAN).
+  - calinski_harabasz, davies_bouldin (opcional).
+  - PCA_varianza_explicada_acumulada.
+  - estabilidad: comparar etiquetas en re-ejecuciones (ARI).
+
+visualizaciones:
+  - PCA 2D/3D coloreado por cluster.
+  - barras: tamaño de cada segmento (% clientes).
+  - boxplots por clúster: {frecuencia_compra, recencia_dias, monto_total_usd, ticket_promedio_usd}.
+  - mapa calor: medias normalizadas por clúster (perfilamiento RFM).
+
+perfilamiento_segmentos (ejemplo esperado):
+  - Cluster A “VIP frecuentes”: recencia baja, alta frecuencia, alto monetario.
+  - Cluster B “Cazadores de ofertas”: alto cupon_uso_pct, ticket bajo, frecuencia media.
+  - Cluster C “Ocasionales”: frecuencia baja, recencia alta, monetario bajo.
+  - Cluster D “Exploradores”: num_categorias alto, frecuencia media, recencia media.
+  - Ruido (DBSCAN): registros atípicos / datos incompletos.
+
+entregables:
+  - dataset_limpio.csv: tras preprocesamiento y features.
+  - clusters_kmeans.csv y clusters_dbscan.csv con etiqueta_cluster.
+  - figuras: pca_clusters.png, tamaños_segmentos.png, boxplots_por_cluster.png.
+  - informe_final.pdf: métodos, parámetros, métricas (silueta, varianza), hallazgos y recomendaciones de negocio.
+
+recomendaciones_negocio (plantilla):
+  - activar campañas de retención para “Ocasionales” (recencia alta).
+  - programas de fidelización para “VIP frecuentes” (up/cross-sell).
+  - optimizar descuentos para “Cazadores de ofertas”; test A/B de cupones.
+  - priorizar categorías con mayor monetario dentro de cada segmento.
+  - monitorear outliers operativos detectados por DBSCAN.
+
+pipeline_sugerido (pseudocódigo):
+  1) cargar → limpiar nulos/outliers → features RFM → escalar/dummies.
+  2) PCA (opcional) → K-Means (grid de k) → elegir por silueta.
+  3) DBSCAN (grid eps, min_samples) → comparar métricas.
+  4) visualizar PCA 2D/3D → perfilar clústeres → informe.
+
+suposiciones:
+  - datos de 20k–200k clientes; ~10–20 columnas útiles.
+  - 5–10% nulos en variables comportamentales.
+  - heavy-tail en montos; estacionalidad ligera en compras.
